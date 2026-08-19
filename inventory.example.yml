@@ -1,0 +1,34 @@
+---
+all:
+  children:
+    cimc:
+      hosts:
+        apic01_cimc:
+          ansible_host: 192.0.2.11
+          associated_apic: apic01
+          apic_target_cimc_version: "4.2(3d)"
+        apic02_cimc:
+          ansible_host: 192.0.2.12
+          associated_apic: apic02
+          apic_target_cimc_version: "4.2(3d)"
+        apic03_cimc:
+          ansible_host: 192.0.2.13
+          associated_apic: apic03
+          apic_target_cimc_version: "4.2(3d)"
+      vars:
+        ansible_connection: local
+
+    apic:
+      hosts:
+        apic01:
+          ansible_host: 198.51.100.11
+        apic02:
+          ansible_host: 198.51.100.12
+        apic03:
+          ansible_host: 198.51.100.13
+      vars:
+        # APIC is reached only over HTTPS via the REST API (aaaLogin /
+        # infraWiNode / aaaLogout) -- no SSH access to the APIC is required
+        # or used anywhere in this repo. All actual HTTP calls run
+        # delegate_to: localhost, same as the cimc group.
+        ansible_connection: local

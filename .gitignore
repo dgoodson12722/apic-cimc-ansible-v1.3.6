@@ -1,0 +1,9 @@
+inventory.yml
+data/cimc_compatibility.yml
+reports/*.json
+reports/*.txt
+!reports/.gitkeep
+*.retry
+.venv/
+__pycache__/
+.DS_Store
