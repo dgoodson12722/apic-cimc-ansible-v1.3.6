@@ -1,0 +1,20 @@
+---
+# Replace these examples with values approved for your exact APIC hardware and
+# current/target APIC releases. The APIC Release Notes and Cisco Recommended
+# Releases document are authoritative. For ACI 6.2(1)+, select apic_managed
+# only when the target HUU is supported by the APIC CIMC workflow/catalog
+# (compatRsSuppHw); otherwise use legacy_huu through the CIMC user interface.
+compatibility:
+  - apic_model: APIC-SERVER-M3
+    current_apic_version: "5.2(8g)"
+    target_apic_version: "6.0(8h)"
+    supported_cimc_versions:
+      - "REPLACE_WITH_CISCO_APPROVED_VERSION"
+    upgrade_method: legacy_huu
+
+  - apic_model: APIC-SERVER-M4
+    current_apic_version: "6.2(3e)"
+    target_apic_version: "6.2(3f)"
+    supported_cimc_versions:
+      - "REPLACE_WITH_APIC_CATALOG_SUPPORTED_HUU"
+    upgrade_method: apic_managed

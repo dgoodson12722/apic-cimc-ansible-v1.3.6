@@ -1,0 +1,7 @@
+---
+- name: Phase 5 - Validate firmware repository image
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate firmware
+      ansible.builtin.import_tasks: ../tasks/validate_firmware.yml

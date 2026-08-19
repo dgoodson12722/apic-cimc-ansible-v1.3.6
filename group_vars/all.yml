@@ -1,0 +1,36 @@
+---
+# Redfish settings
+# cimc_username / cimc_password are supplied at runtime via vars_prompt.
+cimc_validate_certs: false
+cimc_request_timeout: 30
+
+# APIC settings
+# apic_username / apic_password are supplied at runtime via vars_prompt.
+# All APIC access is over HTTPS via the REST API -- no SSH/CLI access to the
+# APIC is required or used.
+apic_validate_certs: false
+apic_request_timeout: 30
+apic_expected_active_controllers: 3
+apic_cluster_health_pattern: '(?i)fully[- ]?fit'
+apic_wait_timeout: 1800
+apic_readiness_retries: 30
+apic_readiness_delay: 30
+
+# Local files
+compatibility_file: "{{ playbook_dir }}/../data/cimc_compatibility.yml"
+report_directory: "{{ playbook_dir }}/../reports"
+
+# Firmware repository validation
+# Cisco's CIMC upgrade documentation explicitly requires validating the MD5
+# published by Cisco. SHA-256 and exact size are optional additional controls.
+firmware_url: ""
+firmware_expected_md5: ""
+firmware_expected_sha256: ""
+firmware_expected_size_bytes: 0
+firmware_download_path: "/tmp/apic-cimc-firmware.iso"
+firmware_keep_validated_copy: false
+
+# Upgrade controls
+upgrade_confirmation_text: COMPLETE
+cimc_wait_timeout: 1800
+cimc_wait_delay: 20

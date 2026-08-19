@@ -1,0 +1,43 @@
+---
+- name: Verify required CIMC variables
+  ansible.builtin.assert:
+    that:
+      - ansible_host is defined
+      - cimc_username | length > 0
+      - cimc_password | length > 0
+    fail_msg: Missing CIMC host or credentials.
+  no_log: true
+
+- name: Wait for CIMC HTTPS port
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 443
+    timeout: "{{ cimc_request_timeout }}"
+  delegate_to: localhost
+
+- name: Query Redfish service root
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}/redfish/v1/"
+    method: GET
+    user: "{{ cimc_username }}"
+    password: "{{ cimc_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ cimc_validate_certs }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ cimc_request_timeout }}"
+  register: redfish_root
+  delegate_to: localhost
+  no_log: true
+
+- name: Validate required Redfish resources
+  ansible.builtin.assert:
+    that:
+      - redfish_root.json.Systems is defined
+      - redfish_root.json.Managers is defined
+      - redfish_root.json.UpdateService is defined
+    fail_msg: CIMC Redfish service root does not expose the required resources.
+
+- name: Display CIMC access result
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: HTTPS and Redfish authentication succeeded."

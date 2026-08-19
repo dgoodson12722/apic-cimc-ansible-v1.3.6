@@ -1,0 +1,15 @@
+---
+- name: Import CIMC access checks
+  ansible.builtin.import_playbook: 01_test_cimc_access.yml
+
+- name: Import CIMC inventory collection
+  ansible.builtin.import_playbook: 02_collect_cimc_inventory.yml
+
+- name: Import APIC cluster checks
+  ansible.builtin.import_playbook: 03_check_apic_cluster.yml
+
+- name: Import compatibility checks
+  ansible.builtin.import_playbook: 04_check_compatibility.yml
+
+- name: Import operator-assisted upgrade
+  ansible.builtin.import_playbook: 07_operator_assisted_upgrade.yml

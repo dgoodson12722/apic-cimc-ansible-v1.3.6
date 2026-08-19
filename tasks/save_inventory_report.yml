@@ -1,0 +1,27 @@
+---
+- name: Show where this report will be written
+  ansible.builtin.debug:
+    msg: "Report directory: {{ report_directory | realpath }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Ensure local report directory exists
+  ansible.builtin.file:
+    path: "{{ report_directory }}"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+  run_once: true
+
+- name: Write inventory report
+  ansible.builtin.copy:
+    content: "{{ cimc_inventory | to_nice_json }}
+"
+    dest: "{{ report_directory }}/{{ inventory_hostname }}-{{ report_label }}.json"
+    mode: "0600"
+  delegate_to: localhost
+
+- name: Show report file written
+  ansible.builtin.debug:
+    msg: "Report file: {{ report_directory | realpath }}/{{ inventory_hostname }}-{{ report_label }}.json"
+  delegate_to: localhost

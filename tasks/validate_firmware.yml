@@ -1,0 +1,75 @@
+---
+- name: Verify firmware validation variables
+  ansible.builtin.assert:
+    that:
+      - firmware_url | length > 0
+      - firmware_expected_md5 | length == 32
+      - firmware_expected_sha256 | length in [0, 64]
+      - firmware_expected_size_bytes | int >= 0
+    fail_msg: >-
+      Configure firmware_url and the 32-character MD5 published by Cisco.
+      SHA-256 and expected size are optional additional validation controls.
+
+- name: Check firmware URL
+  ansible.builtin.uri:
+    url: "{{ firmware_url }}"
+    method: HEAD
+    return_content: false
+    status_code: [200, 301, 302, 307, 308]
+    follow_redirects: all
+  register: firmware_head
+  delegate_to: localhost
+
+- name: Download firmware image for validation
+  ansible.builtin.get_url:
+    url: "{{ firmware_url }}"
+    dest: "{{ firmware_download_path }}"
+    mode: "0600"
+    force: true
+  delegate_to: localhost
+
+- name: Collect firmware MD5 information
+  ansible.builtin.stat:
+    path: "{{ firmware_download_path }}"
+    checksum_algorithm: md5
+  register: firmware_md5_stat
+  delegate_to: localhost
+
+- name: Collect firmware SHA-256 information
+  ansible.builtin.stat:
+    path: "{{ firmware_download_path }}"
+    checksum_algorithm: sha256
+  register: firmware_sha256_stat
+  delegate_to: localhost
+
+- name: Validate Cisco-published MD5 checksum
+  ansible.builtin.assert:
+    that:
+      - firmware_md5_stat.stat.checksum | lower == firmware_expected_md5 | lower
+    fail_msg: Firmware MD5 does not match the checksum approved for this Cisco image.
+
+- name: Validate optional firmware size and SHA-256
+  ansible.builtin.assert:
+    that:
+      - >-
+        firmware_expected_size_bytes | int == 0 or
+        firmware_sha256_stat.stat.size | int == firmware_expected_size_bytes | int
+      - >-
+        firmware_expected_sha256 | length == 0 or
+        firmware_sha256_stat.stat.checksum | lower == firmware_expected_sha256 | lower
+    fail_msg: Optional firmware size or SHA-256 validation failed.
+
+- name: Display firmware validation result
+  ansible.builtin.debug:
+    msg:
+      - "Firmware validated: {{ firmware_download_path }}"
+      - "Size: {{ firmware_sha256_stat.stat.size }} bytes"
+      - "MD5: {{ firmware_md5_stat.stat.checksum }}"
+      - "SHA-256: {{ firmware_sha256_stat.stat.checksum }}"
+
+- name: Remove temporary firmware validation copy
+  ansible.builtin.file:
+    path: "{{ firmware_download_path }}"
+    state: absent
+  delegate_to: localhost
+  when: not firmware_keep_validated_copy | bool

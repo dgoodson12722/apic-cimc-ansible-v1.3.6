@@ -1,0 +1,19 @@
+---
+- name: Phase 4 - Validate compatibility
+  hosts: cimc
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars_prompt:
+    - name: apic_model
+      prompt: APIC hardware model exactly as listed in the compatibility file
+      private: false
+    - name: current_apic_version
+      prompt: Current APIC release
+      private: false
+    - name: target_apic_version
+      prompt: Target APIC release
+      private: false
+  tasks:
+    - name: Validate compatibility
+      ansible.builtin.import_tasks: ../tasks/validate_compatibility.yml

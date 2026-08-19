@@ -1,0 +1,94 @@
+---
+# Checks APIC cluster health over the REST API (HTTPS only -- no SSH/CLI
+# access required). Defaults to the current host's own ansible_host; pass
+# target_apic_host / target_apic_name to check a different APIC, e.g. from
+# within a play whose hosts are the cimc group.
+- name: Set target APIC for this cluster check
+  ansible.builtin.set_fact:
+    _apic_check_host: "{{ target_apic_host | default(ansible_host) }}"
+    _apic_check_name: "{{ target_apic_name | default(inventory_hostname) }}"
+
+- name: Log in to APIC REST API
+  ansible.builtin.uri:
+    url: "https://{{ _apic_check_host }}/api/aaaLogin.json"
+    method: POST
+    body_format: json
+    body:
+      aaaUser:
+        attributes:
+          name: "{{ apic_username }}"
+          pwd: "{{ apic_password }}"
+    validate_certs: "{{ apic_validate_certs }}"
+    status_code: 200
+    timeout: "{{ apic_request_timeout }}"
+  register: apic_login_result
+  delegate_to: localhost
+  no_log: true
+
+- name: Extract APIC auth token
+  ansible.builtin.set_fact:
+    _apic_token: "{{ apic_login_result.json.imdata[0].aaaLogin.attributes.token }}"
+  no_log: true
+
+- name: Query APIC appliance-vector cluster health
+  ansible.builtin.uri:
+    url: "https://{{ _apic_check_host }}/api/class/infraWiNode.json"
+    method: GET
+    headers:
+      Cookie: "APIC-cookie={{ _apic_token }}"
+    validate_certs: "{{ apic_validate_certs }}"
+    status_code: 200
+    timeout: "{{ apic_request_timeout }}"
+  register: apic_cluster_query
+  delegate_to: localhost
+  no_log: true
+
+- name: Log out of APIC REST API
+  ansible.builtin.uri:
+    url: "https://{{ _apic_check_host }}/api/aaaLogout.json"
+    method: POST
+    body_format: json
+    body:
+      aaaUser:
+        attributes:
+          name: "{{ apic_username }}"
+    headers:
+      Cookie: "APIC-cookie={{ _apic_token }}"
+    validate_certs: "{{ apic_validate_certs }}"
+    status_code: 200
+    timeout: "{{ apic_request_timeout }}"
+  delegate_to: localhost
+  no_log: true
+  failed_when: false
+
+- name: Validate cluster query returned data
+  ansible.builtin.assert:
+    that:
+      - apic_cluster_query.json.imdata is defined
+      - apic_cluster_query.json.imdata | length > 0
+    fail_msg: >-
+      APIC returned an empty or invalid infraWiNode response for
+      {{ _apic_check_name }}.
+
+- name: Store cluster node health values
+  ansible.builtin.set_fact:
+    apic_cluster_output: >-
+      {{
+        apic_cluster_query.json.imdata
+        | map(attribute='infraWiNode.attributes.health')
+        | list
+      }}
+
+- name: Validate fully-fit controllers
+  ansible.builtin.assert:
+    that:
+      - (apic_cluster_output | select('match', apic_cluster_health_pattern) | list | length) >= (apic_expected_active_controllers | int)
+    fail_msg: >-
+      Expected at least {{ apic_expected_active_controllers }} fully-fit
+      controller entries for {{ _apic_check_name }}. Review the infraWiNode
+      query results below.
+  when: apic_expected_active_controllers | int > 0
+
+- name: Display APIC cluster output
+  ansible.builtin.debug:
+    msg: "{{ _apic_check_name }} cluster node health: {{ apic_cluster_output }}"

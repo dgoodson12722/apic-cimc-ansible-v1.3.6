@@ -1,0 +1,15 @@
+---
+- name: Phase 3 - Check APIC cluster health
+  hosts: apic
+  gather_facts: false
+  any_errors_fatal: true
+  vars_prompt:
+    - name: apic_username
+      prompt: APIC username
+      private: false
+    - name: apic_password
+      prompt: APIC password
+      private: true
+  tasks:
+    - name: Check APIC cluster
+      ansible.builtin.import_tasks: ../tasks/check_apic_cluster.yml

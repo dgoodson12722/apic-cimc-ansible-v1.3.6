@@ -1,0 +1,61 @@
+---
+- name: Verify compatibility file exists
+  ansible.builtin.stat:
+    path: "{{ compatibility_file }}"
+  register: compatibility_stat
+  delegate_to: localhost
+
+- name: Require local compatibility database
+  ansible.builtin.assert:
+    that:
+      - compatibility_stat.stat.exists
+    fail_msg: >-
+      Create data/cimc_compatibility.yml from the example and populate it with
+      Cisco-approved values before running compatibility validation.
+
+- name: Load compatibility database
+  ansible.builtin.include_vars:
+    file: "{{ compatibility_file }}"
+    name: compatibility_db
+
+- name: Validate entered APIC PID against CIMC Redfish SKU when available
+  ansible.builtin.assert:
+    that:
+      - >-
+        pre_upgrade_inventory.sku | default('unknown') | lower == 'unknown' or
+        pre_upgrade_inventory.sku | trim | upper == apic_model | trim | upper
+    fail_msg: >-
+      Entered APIC model/PID {{ apic_model }} does not match the Redfish SKU
+      {{ pre_upgrade_inventory.sku }}. Verify the APIC PID under CIMC Server > Summary.
+  when: pre_upgrade_inventory is defined
+
+- name: Select matching compatibility records
+  ansible.builtin.set_fact:
+    compatibility_matches: >-
+      {{ compatibility_db.compatibility
+         | selectattr('apic_model', 'equalto', apic_model)
+         | selectattr('current_apic_version', 'equalto', current_apic_version)
+         | selectattr('target_apic_version', 'equalto', target_apic_version)
+         | list }}
+
+- name: Require one matching compatibility record
+  ansible.builtin.assert:
+    that:
+      - compatibility_matches | length == 1
+      - apic_target_cimc_version in compatibility_matches[0].supported_cimc_versions
+      - compatibility_matches[0].upgrade_method in ['legacy_huu', 'apic_managed']
+    fail_msg: >-
+      No unique approved record was found for model={{ apic_model }},
+      current APIC={{ current_apic_version }}, target APIC={{ target_apic_version }},
+      and target CIMC={{ apic_target_cimc_version }}.
+
+- name: Store selected upgrade method
+  ansible.builtin.set_fact:
+    selected_upgrade_method: "{{ compatibility_matches[0].upgrade_method }}"
+
+- name: Display compatibility result
+  ansible.builtin.debug:
+    msg:
+      - "Compatibility validation succeeded."
+      - "Approved method: {{ selected_upgrade_method }}"
+      - "Release Notes and the Cisco Recommended Releases document remain authoritative."

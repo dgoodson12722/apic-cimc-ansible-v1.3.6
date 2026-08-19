@@ -1,0 +1,157 @@
+---
+- name: Validate APIC cluster before CIMC upgrades
+  hosts: apic[0]
+  gather_facts: false
+  any_errors_fatal: true
+  vars_prompt:
+    - name: apic_username
+      prompt: APIC username
+      private: false
+    - name: apic_password
+      prompt: APIC password
+      private: true
+  tasks:
+    - name: Share APIC credentials with every host for this run
+      ansible.builtin.set_fact:
+        apic_username: "{{ apic_username }}"
+        apic_password: "{{ apic_password }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      no_log: true
+
+    - name: Check initial APIC cluster health
+      ansible.builtin.import_tasks: ../tasks/check_apic_cluster.yml
+
+- name: Revalidate the approved CIMC firmware image before disruption
+  hosts: localhost
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Validate firmware against Cisco-published checksum
+      ansible.builtin.import_tasks: ../tasks/validate_firmware.yml
+
+- name: Upgrade CIMCs one controller at a time
+  hosts: cimc
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars_prompt:
+    - name: cimc_username
+      prompt: CIMC username
+      private: false
+    - name: cimc_password
+      prompt: CIMC password
+      private: true
+    - name: apic_model
+      prompt: APIC PID/model exactly as listed in the compatibility file
+      private: false
+    - name: current_apic_version
+      prompt: Current APIC release
+      private: false
+    - name: target_apic_version
+      prompt: Target APIC release
+      private: false
+  tasks:
+    - name: Validate required APIC association
+      ansible.builtin.assert:
+        that:
+          - associated_apic is defined
+          - associated_apic in groups['apic']
+          - apic_target_cimc_version is defined
+        fail_msg: Each CIMC must define a valid associated_apic and target CIMC version.
+
+    - name: Test CIMC access
+      ansible.builtin.import_tasks: ../tasks/test_cimc_access.yml
+
+    - name: Collect pre-upgrade inventory
+      ansible.builtin.import_tasks: ../tasks/collect_cimc_inventory.yml
+
+    - name: Store pre-upgrade inventory
+      ansible.builtin.set_fact:
+        pre_upgrade_inventory: "{{ cimc_inventory }}"
+
+    - name: Save pre-upgrade report
+      ansible.builtin.import_tasks: ../tasks/save_inventory_report.yml
+      vars:
+        report_label: before
+
+    - name: Validate compatibility
+      ansible.builtin.import_tasks: ../tasks/validate_compatibility.yml
+
+    - name: Recheck APIC cluster immediately before this CIMC upgrade
+      ansible.builtin.import_tasks: ../tasks/check_apic_cluster.yml
+      vars:
+        target_apic_host: "{{ hostvars[associated_apic].ansible_host }}"
+        target_apic_name: "{{ associated_apic }}"
+
+    - name: Pause for approved Cisco upgrade procedure
+      ansible.builtin.import_tasks: ../tasks/operator_upgrade_pause.yml
+
+    - name: Wait for CIMC HTTPS to return
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 443
+        delay: "{{ cimc_wait_delay }}"
+        timeout: "{{ cimc_wait_timeout }}"
+      delegate_to: localhost
+
+    - name: Wait for associated APIC HTTPS to return
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[associated_apic].ansible_host }}"
+        port: 443
+        delay: "{{ cimc_wait_delay }}"
+        timeout: "{{ apic_wait_timeout }}"
+      delegate_to: localhost
+
+    - name: Wait until associated APIC accepts REST API logins
+      ansible.builtin.uri:
+        url: "https://{{ hostvars[associated_apic].ansible_host }}/api/aaaLogin.json"
+        method: POST
+        body_format: json
+        body:
+          aaaUser:
+            attributes:
+              name: "{{ apic_username }}"
+              pwd: "{{ apic_password }}"
+        validate_certs: "{{ apic_validate_certs }}"
+        status_code: 200
+        timeout: "{{ apic_request_timeout }}"
+      register: apic_ready
+      delegate_to: localhost
+      no_log: true
+      retries: "{{ apic_readiness_retries }}"
+      delay: "{{ apic_readiness_delay }}"
+      until: apic_ready.status | default(0) == 200
+
+    - name: Re-test CIMC access
+      ansible.builtin.import_tasks: ../tasks/test_cimc_access.yml
+
+    - name: Collect post-upgrade inventory
+      ansible.builtin.import_tasks: ../tasks/collect_cimc_inventory.yml
+
+    - name: Store post-upgrade inventory
+      ansible.builtin.set_fact:
+        post_upgrade_inventory: "{{ cimc_inventory }}"
+
+    - name: Save post-upgrade report
+      ansible.builtin.import_tasks: ../tasks/save_inventory_report.yml
+      vars:
+        report_label: after
+
+    - name: Compare pre/post inventory
+      ansible.builtin.import_tasks: ../tasks/compare_inventory.yml
+
+    - name: Check APIC cluster after this controller
+      ansible.builtin.import_tasks: ../tasks/check_apic_cluster.yml
+      vars:
+        target_apic_host: "{{ hostvars[associated_apic].ansible_host }}"
+        target_apic_name: "{{ associated_apic }}"
+
+- name: Final APIC cluster validation
+  hosts: apic[0]
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Check final APIC cluster health
+      ansible.builtin.import_tasks: ../tasks/check_apic_cluster.yml

@@ -1,0 +1,22 @@
+---
+- name: Phase 2 - Collect CIMC inventory
+  hosts: cimc
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars_prompt:
+    - name: cimc_username
+      prompt: CIMC username
+      private: false
+    - name: cimc_password
+      prompt: CIMC password
+      private: true
+  tasks:
+    - name: Test CIMC access
+      ansible.builtin.import_tasks: ../tasks/test_cimc_access.yml
+    - name: Collect CIMC inventory
+      ansible.builtin.import_tasks: ../tasks/collect_cimc_inventory.yml
+    - name: Save current inventory report
+      ansible.builtin.import_tasks: ../tasks/save_inventory_summary.yml
+      vars:
+        report_label: current

@@ -1,0 +1,16 @@
+---
+- name: Phase 1 - Test CIMC Redfish access
+  hosts: cimc
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars_prompt:
+    - name: cimc_username
+      prompt: CIMC username
+      private: false
+    - name: cimc_password
+      prompt: CIMC password
+      private: true
+  tasks:
+    - name: Run CIMC access tests
+      ansible.builtin.import_tasks: ../tasks/test_cimc_access.yml

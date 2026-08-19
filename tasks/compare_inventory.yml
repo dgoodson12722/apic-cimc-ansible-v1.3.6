@@ -1,0 +1,58 @@
+---
+- name: Build normalized before-and-after comparison
+  ansible.builtin.set_fact:
+    cimc_inventory_diff:
+      inventory_hostname: "{{ inventory_hostname }}"
+      compared_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+      before:
+        model: "{{ pre_upgrade_inventory.model }}"
+        sku: "{{ pre_upgrade_inventory.sku }}"
+        serial_number: "{{ pre_upgrade_inventory.serial_number }}"
+        bios_version: "{{ pre_upgrade_inventory.bios_version }}"
+        cimc_firmware_version: "{{ pre_upgrade_inventory.cimc_firmware_version }}"
+        system_health: "{{ pre_upgrade_inventory.system_health }}"
+        manager_health: "{{ pre_upgrade_inventory.manager_health }}"
+        power_state: "{{ pre_upgrade_inventory.power_state }}"
+        firmware_inventory: "{{ pre_upgrade_inventory.firmware_inventory | default([]) }}"
+      after:
+        model: "{{ post_upgrade_inventory.model }}"
+        sku: "{{ post_upgrade_inventory.sku }}"
+        serial_number: "{{ post_upgrade_inventory.serial_number }}"
+        bios_version: "{{ post_upgrade_inventory.bios_version }}"
+        cimc_firmware_version: "{{ post_upgrade_inventory.cimc_firmware_version }}"
+        system_health: "{{ post_upgrade_inventory.system_health }}"
+        manager_health: "{{ post_upgrade_inventory.manager_health }}"
+        power_state: "{{ post_upgrade_inventory.power_state }}"
+        firmware_inventory: "{{ post_upgrade_inventory.firmware_inventory | default([]) }}"
+      changed:
+        bios_version: "{{ pre_upgrade_inventory.bios_version != post_upgrade_inventory.bios_version }}"
+        cimc_firmware_version: "{{ pre_upgrade_inventory.cimc_firmware_version != post_upgrade_inventory.cimc_firmware_version }}"
+        firmware_inventory: "{{ pre_upgrade_inventory.firmware_inventory | default([]) != post_upgrade_inventory.firmware_inventory | default([]) }}"
+        system_health: "{{ pre_upgrade_inventory.system_health != post_upgrade_inventory.system_health }}"
+        manager_health: "{{ pre_upgrade_inventory.manager_health != post_upgrade_inventory.manager_health }}"
+        power_state: "{{ pre_upgrade_inventory.power_state != post_upgrade_inventory.power_state }}"
+
+- name: Write inventory-diff report
+  ansible.builtin.copy:
+    content: "{{ cimc_inventory_diff | to_nice_json }}
+"
+    dest: "{{ report_directory }}/{{ inventory_hostname }}-diff.json"
+    mode: "0600"
+  delegate_to: localhost
+
+- name: Show diff report file written
+  ansible.builtin.debug:
+    msg: "Diff report file: {{ report_directory | realpath }}/{{ inventory_hostname }}-diff.json"
+  delegate_to: localhost
+
+- name: Verify identity and target firmware after upgrade
+  ansible.builtin.assert:
+    that:
+      - post_upgrade_inventory.model == pre_upgrade_inventory.model
+      - post_upgrade_inventory.serial_number == pre_upgrade_inventory.serial_number
+      - >-
+        post_upgrade_inventory.cimc_firmware_version | trim | lower ==
+        apic_target_cimc_version | trim | lower
+      - post_upgrade_inventory.system_health | lower in ['ok', 'healthy']
+      - post_upgrade_inventory.manager_health | lower in ['ok', 'healthy']
+    fail_msg: Post-upgrade inventory validation failed. Review the JSON reports.

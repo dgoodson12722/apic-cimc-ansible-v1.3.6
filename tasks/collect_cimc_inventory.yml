@@ -1,0 +1,126 @@
+---
+- name: Query Redfish service root
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}/redfish/v1/"
+    method: GET
+    user: "{{ cimc_username }}"
+    password: "{{ cimc_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ cimc_validate_certs }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ cimc_request_timeout }}"
+  register: rf_root
+  delegate_to: localhost
+  no_log: true
+
+- name: Validate required Redfish service-root resources
+  ansible.builtin.assert:
+    that:
+      - rf_root.json.Systems is defined
+      - rf_root.json.Systems['@odata.id'] is defined
+      - rf_root.json.Managers is defined
+      - rf_root.json.Managers['@odata.id'] is defined
+    fail_msg: CIMC Redfish root did not advertise Systems and Managers.
+
+- name: Query systems collection
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}{{ rf_root.json.Systems['@odata.id'] }}"
+    method: GET
+    user: "{{ cimc_username }}"
+    password: "{{ cimc_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ cimc_validate_certs }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ cimc_request_timeout }}"
+  register: rf_systems
+  delegate_to: localhost
+  no_log: true
+
+- name: Validate systems collection
+  ansible.builtin.assert:
+    that:
+      - rf_systems.json.Members is defined
+      - rf_systems.json.Members | length > 0
+      - rf_systems.json.Members[0]['@odata.id'] is defined
+    fail_msg: CIMC returned an empty or invalid Redfish Systems collection.
+
+- name: Query first system
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}{{ rf_systems.json.Members[0]['@odata.id'] }}"
+    method: GET
+    user: "{{ cimc_username }}"
+    password: "{{ cimc_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ cimc_validate_certs }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ cimc_request_timeout }}"
+  register: rf_system
+  delegate_to: localhost
+  no_log: true
+
+- name: Query managers collection
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}{{ rf_root.json.Managers['@odata.id'] }}"
+    method: GET
+    user: "{{ cimc_username }}"
+    password: "{{ cimc_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ cimc_validate_certs }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ cimc_request_timeout }}"
+  register: rf_managers
+  delegate_to: localhost
+  no_log: true
+
+- name: Validate managers collection
+  ansible.builtin.assert:
+    that:
+      - rf_managers.json.Members is defined
+      - rf_managers.json.Members | length > 0
+      - rf_managers.json.Members[0]['@odata.id'] is defined
+    fail_msg: CIMC returned an empty or invalid Redfish Managers collection.
+
+- name: Query first manager
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}{{ rf_managers.json.Members[0]['@odata.id'] }}"
+    method: GET
+    user: "{{ cimc_username }}"
+    password: "{{ cimc_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ cimc_validate_certs }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ cimc_request_timeout }}"
+  register: rf_manager
+  delegate_to: localhost
+  no_log: true
+
+- name: Build normalized CIMC inventory
+  ansible.builtin.set_fact:
+    cimc_inventory:
+      collected_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+      inventory_hostname: "{{ inventory_hostname }}"
+      address: "{{ ansible_host }}"
+      associated_apic: "{{ associated_apic | default('') }}"
+      manufacturer: "{{ rf_system.json.Manufacturer | default('unknown') }}"
+      model: "{{ rf_system.json.Model | default('unknown') }}"
+      serial_number: "{{ rf_system.json.SerialNumber | default('unknown') }}"
+      sku: "{{ rf_system.json.SKU | default('unknown') }}"
+      bios_version: "{{ rf_system.json.BiosVersion | default('unknown') }}"
+      power_state: "{{ rf_system.json.PowerState | default('unknown') }}"
+      system_health: "{{ rf_system.json.Status.Health | default('unknown') }}"
+      manager_model: "{{ rf_manager.json.Model | default('unknown') }}"
+      cimc_firmware_version: >-
+        {{
+          rf_manager.json.FirmwareVersion
+          | default(rf_manager.json.Version | default('unknown'))
+        }}
+      manager_health: "{{ rf_manager.json.Status.Health | default('unknown') }}"
+
+- name: Display normalized inventory
+  ansible.builtin.debug:
+    var: cimc_inventory

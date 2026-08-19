@@ -1,0 +1,42 @@
+---
+- name: Build trimmed inventory summary
+  ansible.builtin.set_fact:
+    cimc_inventory_summary:
+      address: "{{ cimc_inventory.address }}"
+      associated_apic: "{{ cimc_inventory.associated_apic }}"
+      bios_version: "{{ cimc_inventory.bios_version }}"
+      cimc_firmware_version: "{{ cimc_inventory.cimc_firmware_version }}"
+      collected_at: "{{ cimc_inventory.collected_at }}"
+      inventory_hostname: "{{ cimc_inventory.inventory_hostname }}"
+      manager_health: "{{ cimc_inventory.manager_health }}"
+      manager_model: "{{ cimc_inventory.manager_model }}"
+      manufacturer: "{{ cimc_inventory.manufacturer }}"
+      system_health: "{{ cimc_inventory.system_health }}"
+      serial_number: "{{ cimc_inventory.serial_number }}"
+
+- name: Show where this report will be written
+  ansible.builtin.debug:
+    msg: "Report directory: {{ report_directory | realpath }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Ensure local report directory exists
+  ansible.builtin.file:
+    path: "{{ report_directory }}"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+  run_once: true
+
+- name: Write inventory summary report
+  ansible.builtin.copy:
+    content: "{{ cimc_inventory_summary | to_nice_json }}
+"
+    dest: "{{ report_directory }}/{{ inventory_hostname }}-{{ report_label }}.json"
+    mode: "0600"
+  delegate_to: localhost
+
+- name: Show report file written
+  ansible.builtin.debug:
+    msg: "Report file: {{ report_directory | realpath }}/{{ inventory_hostname }}-{{ report_label }}.json"
+  delegate_to: localhost

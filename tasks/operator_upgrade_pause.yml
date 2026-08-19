@@ -1,0 +1,60 @@
+---
+- name: Display CIMC upgrade summary
+  ansible.builtin.debug:
+    msg:
+      - "============================================================"
+      - "CIMC UPGRADE REQUIRED FOR {{ inventory_hostname }}"
+      - "Associated APIC: {{ associated_apic }}"
+      - "APIC PID/model: {{ apic_model }}"
+      - "Current CIMC: {{ pre_upgrade_inventory.cimc_firmware_version }}"
+      - "Target CIMC: {{ apic_target_cimc_version }}"
+      - "Approved method: {{ selected_upgrade_method }}"
+      - "============================================================"
+
+- name: Display Cisco legacy HUU procedure requirements
+  ansible.builtin.debug:
+    msg:
+      - "LEGACY HUU - ENGINEER ACTION REQUIRED"
+      - "1. Confirm the APIC PID/UCS model and Cisco-approved HUU image."
+      - "2. Confirm the Cisco-published MD5 checksum matches the image."
+      - "3. Ensure a BIOS Administrator password is set before rebooting."
+      - "4. Launch CIMC vKVM; Virtual Media > Activate Virtual Devices."
+      - "5. Map the HUU ISO as CD/DVD."
+      - "6. Power > Reset System (warm boot)."
+      - "7. Press F6 and boot the vKVM-mapped vDVD."
+      - "8. Start HUU, accept the license, and choose Update All."
+      - "9. If prompted for Cisco IMC Secure Boot, select NO."
+      - "10. Wait for all HUU component updates and reboot(s) to complete."
+      - "11. Verify HUU Last Update Verify / CIMC Firmware Management."
+      - "12. Do not continue until CIMC and the associated APIC are recovered."
+  when: selected_upgrade_method == 'legacy_huu'
+
+- name: Display Cisco APIC-managed CIMC procedure requirements
+  ansible.builtin.debug:
+    msg:
+      - "APIC-MANAGED CIMC - ENGINEER ACTION REQUIRED (ACI 6.2(1)+)"
+      - "1. Confirm the HUU version is supported by the APIC CIMC workflow/catalog."
+      - "   If the required Release Notes-supported HUU is not in compatRsSuppHw, use CIMC GUI/HUU instead."
+      - "2. In APIC: Admin > Firmware > Controllers > Controller & CIMC upgrade."
+      - "3. Choose CIMC as the Upgrade Component."
+      - "4. Validate each APIC using CIMC username/password/IP and the target HUU image."
+      - "5. Require all applicable APICs to show Validated (or already Upgraded)."
+      - "6. Wait for pre-upgrade validation results; fix any Catastrophic failure."
+      - "7. Review Summary, click Submit, and monitor Progress."
+      - "8. Wait until all steps show Completed before continuing."
+  when: selected_upgrade_method == 'apic_managed'
+
+- name: Pause for operator completion
+  ansible.builtin.pause:
+    prompt: >-
+      Type {{ upgrade_confirmation_text }} after the approved Cisco CIMC upgrade
+      has completed for {{ inventory_hostname }}
+  register: operator_confirmation
+
+- name: Validate operator confirmation
+  ansible.builtin.assert:
+    that:
+      - >-
+        operator_confirmation.user_input | trim | upper ==
+        upgrade_confirmation_text | trim | upper
+    fail_msg: Upgrade confirmation did not match the required text.

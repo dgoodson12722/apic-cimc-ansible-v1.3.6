@@ -1,0 +1,40 @@
+---
+- name: Phase 6 - Test pre/post reporting without an upgrade
+  hosts: cimc
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars_prompt:
+    - name: cimc_username
+      prompt: CIMC username
+      private: false
+    - name: cimc_password
+      prompt: CIMC password
+      private: true
+  tasks:
+    - name: Collect baseline inventory
+      ansible.builtin.import_tasks: ../tasks/collect_cimc_inventory.yml
+    - name: Store baseline inventory
+      ansible.builtin.set_fact:
+        pre_upgrade_inventory: "{{ cimc_inventory }}"
+    - name: Save baseline report
+      ansible.builtin.import_tasks: ../tasks/save_inventory_report.yml
+      vars:
+        report_label: before
+    - name: Use current inventory as simulated post-upgrade inventory
+      ansible.builtin.set_fact:
+        post_upgrade_inventory: "{{ cimc_inventory }}"
+    - name: Save simulated post report
+      ansible.builtin.import_tasks: ../tasks/save_inventory_report.yml
+      vars:
+        report_label: after
+    - name: Build test diff without enforcing a target version
+      ansible.builtin.copy:
+        content: >-
+          {{ {'inventory_hostname': inventory_hostname,
+              'before': pre_upgrade_inventory,
+              'after': post_upgrade_inventory,
+              'identical': (pre_upgrade_inventory == post_upgrade_inventory)} | to_nice_json }}
+        dest: "{{ report_directory }}/{{ inventory_hostname }}-test-diff.json"
+        mode: "0600"
+      delegate_to: localhost
